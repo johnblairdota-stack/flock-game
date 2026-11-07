@@ -20,6 +20,16 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
 
 export default {
   async fetch(request, env) {
+    try {
+      return await route(request, env);
+    } catch (err) {
+      console.error('route failed', err);
+      return json({ error: 'Server error', detail: String(err && err.message || err) }, 500);
+    }
+  },
+};
+
+async function route(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/new' && request.method === 'POST') {
@@ -50,8 +60,7 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
-  },
-};
+}
 
 export class Room extends DurableObject {
   constructor(ctx, env) {
