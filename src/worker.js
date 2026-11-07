@@ -32,6 +32,18 @@ export default {
 async function route(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname === '/api/health') {
+      const out = { worker: 'ok', hasRooms: !!env.ROOMS };
+      try {
+        const stub = env.ROOMS.get(env.ROOMS.idFromName('HLTH'));
+        const r = await stub.fetch('https://room/info');
+        out.room = r.status + ' ' + (await r.text());
+      } catch (err) {
+        out.roomError = String(err && err.stack || err);
+      }
+      return json(out);
+    }
+
     if (url.pathname === '/api/new' && request.method === 'POST') {
       for (let i = 0; i < 8; i++) {
         const code = makeCode();
