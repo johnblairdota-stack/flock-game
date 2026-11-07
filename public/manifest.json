@@ -1,0 +1,9 @@
+{
+  "name": "Flock — think like the herd",
+  "short_name": "Flock",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF4DF",
+  "theme_color": "#FFF4DF",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
