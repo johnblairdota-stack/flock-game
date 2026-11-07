@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalize, groupAnswers, similar } from '../src/match.js';
-import { newRoom, addPlayer, apply, view, tick, setConnected } from '../src/game.js';
+import { newRoom, addPlayer, apply, view, tick, setConnected, nextAlarm } from '../src/game.js';
 
 test('normalize', () => {
   assert.equal(normalize('The Beatles!'), 'beatle');
@@ -123,4 +123,37 @@ test('duplicate names get numbered', () => {
   addPlayer(s, { id: 'a', token: 'a', name: 'John' });
   const b = addPlayer(s, { id: 'b', token: 'b', name: 'john' });
   assert.equal(b.name, 'john 2');
+});
+
+test('alarms never loop (regression: host left, nobody else online)', () => {
+  const s = room(2);
+  const t0 = Date.now();
+  setConnected(s, 'p1', false);
+  setConnected(s, 'p0', false); // host gone, nobody left
+  // Simulate many alarm firings: each must be far in the future, not now+50ms
+  let t = t0 + 60000;
+  for (let i = 0; i < 5; i++) {
+    tick(s, t);
+    const next = nextAlarm(s, t);
+    assert.ok(next - t > 60 * 60 * 1000, `alarm ${i} too soon: ${next - t}ms`);
+    t = next;
+  }
+  // Stale room with sockets still open: re-check later, not immediately
+  const s2 = room(2);
+  s2.lastActivity = t0 - 7 * 3600 * 1000;
+  assert.ok(nextAlarm(s2, t0) - t0 > 60 * 60 * 1000);
+});
+
+test('alarms still fire for timer and host hand-over', () => {
+  const s = room(3);
+  apply(s, 'p0', { type: 'settings', settings: { timer: 30 } });
+  apply(s, 'p0', { type: 'start' });
+  apply(s, 'p0', { type: 'category', text: 'X' });
+  const t = Date.now();
+  assert.ok(Math.abs(nextAlarm(s, t) - (s.deadline + 50)) < 5);
+  setConnected(s, 'p0', false); // host leaves, p1/p2 online
+  const n = nextAlarm(s, s.hostAwaySince);
+  assert.ok(n - s.hostAwaySince <= 21000 + 5);
+  tick(s, s.hostAwaySince + 21001);
+  assert.equal(s.hostId, 'p1');
 });

@@ -2,7 +2,7 @@
 // Phones connect over WebSocket to /ws/<CODE>; every room lives in its own
 // Durable Object, so all players in a room hit the same single instance.
 import { DurableObject } from 'cloudflare:workers';
-import { newRoom, addPlayer, apply, view, tick, setConnected, removePlayer, GameError } from './game.js';
+import { newRoom, addPlayer, apply, view, tick, setConnected, GameError, nextAlarm } from './game.js';
 
 // No vowels -> no accidental rude words. No look-alikes (0/O, 1/I).
 const CODE_CHARS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -31,18 +31,6 @@ export default {
 
 async function route(request, env) {
     const url = new URL(request.url);
-
-    if (url.pathname === '/api/health') {
-      const out = { worker: 'ok', hasRooms: !!env.ROOMS };
-      try {
-        const stub = env.ROOMS.get(env.ROOMS.idFromName('HLTH'));
-        const r = await stub.fetch('https://room/info');
-        out.room = r.status + ' ' + (await r.text());
-      } catch (err) {
-        out.roomError = String(err && err.stack || err);
-      }
-      return json(out);
-    }
 
     if (url.pathname === '/api/new' && request.method === 'POST') {
       for (let i = 0; i < 8; i++) {
@@ -210,10 +198,7 @@ export class Room extends DurableObject {
     const s = this.state;
     await this.ctx.storage.put('state', s);
     // One alarm drives: round timer, host handover, idle cleanup.
-    const times = [s.lastActivity + IDLE_MS + 1000];
-    if (s.phase === 'answering' && s.deadline) times.push(s.deadline + 50);
-    if (s.hostAwaySince) times.push(s.hostAwaySince + 21000);
-    await this.ctx.storage.setAlarm(Math.max(Date.now() + 50, Math.min(...times)));
+    await this.ctx.storage.setAlarm(nextAlarm(s, Date.now(), IDLE_MS));
   }
 
   broadcast() {

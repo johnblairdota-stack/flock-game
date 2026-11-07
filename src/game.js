@@ -334,3 +334,22 @@ export function view(s, forId) {
     history: s.phase === 'over' ? s.history : s.history.slice(-1),
   };
 }
+
+// When should this room's single alarm next fire? Every candidate must lie in
+// the future or be a one-shot that tick() resolves, so a room can never fall
+// into a tight alarm loop (each alarm counts against Durable Object quotas).
+export function nextAlarm(s, t = now(), idleMs = 6 * 60 * 60 * 1000) {
+  const times = [];
+  // Idle cleanup: if the room is already stale but sockets are still open, look again later.
+  const idleAt = s.lastActivity + idleMs + 1000;
+  times.push(idleAt > t ? idleAt : t + idleMs);
+  // Answer timer: fires once; tick() then reveals, which clears the deadline.
+  if (s.phase === 'answering' && s.deadline) times.push(Math.max(s.deadline + 50, t + 50));
+  // Host hand-over: only worth waking up for if someone is connected to take over.
+  const host = s.players[s.hostId];
+  const someoneElse = connectedIds(s).some(id => id !== s.hostId);
+  if (s.hostAwaySince && (!host || !host.connected) && someoneElse) {
+    times.push(Math.max(s.hostAwaySince + 21000, t + 50));
+  }
+  return Math.min(...times);
+}
